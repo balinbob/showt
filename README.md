@@ -1,2 +1,2 @@
 # showt
-CLI tagviewer for audio files, offering a variety of options and formats
+CLI tagviewer for batch audio files, offering a variety of options and formats
