@@ -244,8 +244,11 @@ class Shower:
                 val = mf.get(key)[0]
                 self.grouping_dict.update({key: val})
 
+        self.clr = 31
         for k in self.parser.colkeywords():
             if k in mf:
+                if color:
+                    s += self.insert_colors(opts)
                 if k == 'tracknumber':
                     hdr = ' tn'
                     s += ('%s' % hdr)
@@ -261,7 +264,7 @@ class Shower:
 
                 s += (klen-vlen if klen > vlen else vlen-klen+1) * ' '
 
-        colhdrs = s
+        colhdrs = s + '\033[m'
 
         for fn in self.files:
             mf = mf_open(fn)
@@ -322,9 +325,6 @@ class Shower:
                 info = self.getlength(ext, File(fn).info)
                 s = info + s
 
-            #  import bpdb
-            #  bpdb.set_trace()
-
             print(colhdrs, end='')
             if colhdrs:
                 print('\n%s' % s)
@@ -333,8 +333,6 @@ class Shower:
                 print(s)
             if color:
                 print('\033[m', end='')
-            # else:
-                # print
 
             my_keys = ['TALB', 'TIT2', 'TRCK', 'TPE1',
                        'TPE2', 'TPOS', 'TDRC', 'TCON']
@@ -399,7 +397,7 @@ class Shower:
         fname += (width + 2 - len(fname))*' ' + ext
         return fname
 
-    def insert_colors(self, opts):
+    def insert_colors(self, opts, colkey=None):
         intensity = 0
         if opts.count('p') > 1:
             intensity = 1
@@ -446,8 +444,9 @@ def mf_open(fname):
         return EasyID3(fname)
     except ID3NoHeaderError:
         return File(fname)
-    except:
+    except (IOError, OSError):
         return {}
+
 
 def main():
     args = sys.argv[1:]
@@ -456,36 +455,12 @@ def main():
         if 'help' in arg:
             _help()
             exit
-    if 'M' in parser.optstr:
-        try:
-            f = open('/etc/mpd.conf', 'r')
-        except IOError as e:
-            print(e)
-            exit(1)
-
-        while True:
-            line = f.readline()
-            if line == '':
-                print("couldn't locate music directory")
-                f.close()
-                exit(1)
-            if '#' in line:
-                i = line.index('#')
-                line = line[:i]
-            if re.search('.*music_directory.*\".*\".*', line):
-                mdir = re.sub('.*music_directory.*\"(.*)\".*', '\\1', line)
-                mdir = mdir.strip('\n')
-                if mdir:
-                    break
-        mdir = path.expanduser(mdir)
-        f.close()
 
     if 's' in parser.optstr:
         while True:
             fname = sys.stdin.readline()
             if fname == '':
                 break
-#            fname=path.join( mdir,fname.strip('\n') )
             fname = path.realpath(fname.strip('\n'))
             parser.files.append(fname.strip('\n'))
             if not path.isfile(fname.strip('\n')):
@@ -502,9 +477,6 @@ def main():
 
     if not parser.files:
         exit(0)
-
-#    if 'e' in parser.optstr:
-#        parser.files.sort()
 
     s = Shower(parser)
     s.show()
