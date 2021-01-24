@@ -1,16 +1,20 @@
 #! /usr/bin/env python3
 # vim: set ft=python ts=4 sw=4 et ai:
 
+import os
 import re
 import sys
-import mutagen
+#  import mutagen
 from os import path
 from os.path import isdir
 from glob import glob
+import mutagen
 from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3NoHeaderError
 from mutagen import File
+from libshowt.helpers import print_extra_items
+from libshowt.helpers import eachkey
 
 
 class AlbumHeader(__builtins__.dict):
@@ -202,7 +206,7 @@ class Shower:
             cleaned = None
             try:
                 d = MP3(fn)
-            except:
+            except BaseException:
                 print(sys.exc_info())
                 print("%f\t\tcan't open as MP3" % fn)
                 continue
@@ -226,14 +230,19 @@ class Shower:
         color = 'p' in opts
         sort = 'u' not in opts
         header.show(color, sort)
+        parser = self.parser
+        files = self.files
 
         fn = self.files[0]
         fnwidth = len(self.filename_column(fn, self.parser.fname_cols()))
         ext = self.parser.getext(fn)
-        if 'i' in opts and '.mp3' == ext:
-            s = 'info' + ' ' * 15 + 'filename' + ' ' * (fnwidth-6)
+        if 'i' in opts:
+            if '.mp3' == ext:
+                colhdrs = 'info' + ' ' * 29 + 'filename' + ' ' * (fnwidth-6)
+            else:
+                colhdrs = 'info' + ' ' * 23 + 'filename' + ' ' * (fnwidth-6)
         else:
-            s = 'info   filename                     '
+            colhdrs = 'filename' + ' ' * (fnwidth-6)
         # widths = []
 
         mf = mf_open(fn)
@@ -248,23 +257,23 @@ class Shower:
         for k in self.parser.colkeywords():
             if k in mf:
                 if color:
-                    s += self.insert_colors(opts)
+                    colhdrs += self.insert_colors(opts)
                 if k == 'tracknumber':
                     hdr = ' tn'
-                    s += ('%s' % hdr)
+                    colhdrs += ('%s' % hdr)
                 elif k == 'discnumber':
                     hdr = ' dn'
-                    s += ('%s' % hdr)
+                    colhdrs += ('%s' % hdr)
                 else:
-                    s += ('%s' % k)
+                    colhdrs += ('%s' % k)
                     hdr = k
                 v = mf[k][0]
                 klen = len(hdr)
                 vlen = len(v)
 
-                s += (klen-vlen if klen > vlen else vlen-klen+1) * ' '
+                colhdrs += (klen-vlen if klen > vlen else vlen-klen+1) * ' '
 
-        colhdrs = s + '\033[m'
+        colhdrs += '\033[m'
 
         for fn in self.files:
             mf = mf_open(fn)
@@ -279,52 +288,19 @@ class Shower:
                     h.show(color=True)
 
             self.clr = 31
-            s = '%s  ' % self.filename_column(fn, self.parser.fname_cols())
 
-            for k in self.parser.colkeywords():
-                multival = ''
-                if k in mf:
-                    if color:
-                        s += self.insert_colors(opts)
-                    try:
-
-                        if 'j' in opts and k == 'tracknumber':
-                            n = len(str(len(self.files)))
-                            tn = str(mf.get(k, [0])[0])
-                            col = tn.rjust(n, '0')
-                            s += col
-                        else:
-                            n = 0
-                            while True:
-                                try:
-                                    val = '%s' % mf.get(k)[n]
-                                except IndexError:
-                                    break
-                                if n > 0:
-                                    multival += '\n' + val
-                                else:
-                                    multival = val
-                                n += 1
-                                if 'm' not in opts:
-                                    break
-                    except KeyError:
-                        pass
-
-                s += '%s ' % multival  # .encode('utf-8')
-
+            s = eachkey(self, parser, fn, mf, color, opts, files)
+            func = MP3 if ext == '.mp3' else File
+            try:
+                info = func(fn).info
+            except (IsADirectoryError, mutagen.MutagenError):
+                return ''
+            inf = ''
             if 'i' in opts:
                 ext = ext.lower()
-                if ext == '.mp3':
-                    s = self.tech(ext, MP3(fn).info) + s
-
-                else:
-                    info = self.tech(ext, File(fn).info)
-                    s = self.tech(ext, File(fn).info) + s
-
-            else:
-                info = self.getlength(ext, File(fn).info)
-                s = info + s
-
+                inf = self.tech(ext, info)
+                inf += self.getlength(ext, info)
+            s = inf + s
             print(colhdrs, end='')
             if colhdrs:
                 print('\n%s' % s)
@@ -334,42 +310,8 @@ class Shower:
             if color:
                 print('\033[m', end='')
 
-            my_keys = ['TALB', 'TIT2', 'TRCK', 'TPE1',
-                       'TPE2', 'TPOS', 'TDRC', 'TCON']
-            if 'E' in opts and ext.lower() == '.mp3':
-                mf = mutagen.File(fn)
-                for f in mf:
-                    if f in my_keys:
-                        continue
-                    elif f.startswith('APIC'):
-                        print('Picture  yes')
-                        continue
-                    elif not mf[f][0]:
-                        continue
-                    frame_desc = mf[f].__class__.__doc__.partition('\n')[0]
-                    tab = (32 - len(frame_desc))*' '
-                    print(frame_desc, tab, mf[f][0])
-                print
-
-            my_keys = ['album',
-                       'artist',
-                       'date',
-                       'venue',
-                       'genre',
-                       'title',
-                       'discnumber',
-                       'tracknumber',
-                       'length']
-            if 'E' in opts and ext.lower() in ['.flac', '.ogg', '.ape']:
-                mf == mutagen.File(fn)
-                for key in mf:
-                    if key in my_keys:
-                        continue
-                    tab = (32 - len(key))*' '
-                    if len(mf[key]) > 1:
-                        print(key, tab, mf[key])
-                    elif len(mf[key]) == 1:
-                        print(key, tab, mf[key][0])
+            if 'E' in opts:
+                print_extra_items(fn, ext)
 
     def getlength(self, ext, info):
         sec = info.length % 60
@@ -378,16 +320,17 @@ class Shower:
         return s
 
     def tech(self, ext, info):
-        sec = info.length % 60
-        min = (info.length-sec)/60
         if ext == '.mp3':
-            s = '%d/%d %3skbps %02d:%02d  ' % (
-                info.protected, info.sketchy,
-                info.bitrate/1000,
-                min, sec)
+            s = '%dch %s %3skbps %.1fkhz ' % (
+                info.channels,
+                info.protected,
+                round(info.bitrate/1000),
+                float(info.sample_rate/1000))
         else:
-            s = '%d %02d:%02d  ' % (
-                info.channels, min, sec)
+            s = '%dch %3skbps %.1fkhz ' % (
+                info.channels,
+                round(info.bitrate/1000),
+                float(info.sample_rate/1000))
         return s
 
     def filename_column(self, fpath, width=20):
@@ -440,12 +383,16 @@ def _help():
 
 
 def mf_open(fname):
+    if os.path.isfile(fname):
+        pass
+    else:
+        return {}
     try:
         return EasyID3(fname)
+    except (IOError, OSError, IsADirectoryError):
+        return {}
     except ID3NoHeaderError:
         return File(fname)
-    except (IOError, OSError):
-        return {}
 
 
 def main():
