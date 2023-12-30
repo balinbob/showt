@@ -13,8 +13,11 @@ from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3NoHeaderError
 from mutagen import File
+
+'''
 from libshowt.helpers import print_extra_items
 from libshowt.helpers import eachkey
+'''
 
 
 class AlbumHeader(__builtins__.dict):
@@ -25,6 +28,7 @@ class AlbumHeader(__builtins__.dict):
                              'composer',
                              'genre',
                              'comment',
+                             'setnumber',
                              'discnumber']):
         __builtins__.dict.__init__(self)
         for k in keys:
@@ -37,6 +41,7 @@ class AlbumHeader(__builtins__.dict):
                                  'composer',
                                  'genre',
                                  'comment',
+                                 'setnumber',
                                  'discnumber']
         self.color = '\033[0;36m'
 
@@ -73,7 +78,7 @@ class AlbumHeader(__builtins__.dict):
         if len(output) > len(self.color):
             print(output[:-1])
             if color:
-                print("%s" % '\033[0m')
+                print("%s" % '\033[0m', end='')
             else:
                 print('')
 
@@ -84,67 +89,62 @@ class OParser(object):
         self.glob(arglist)
         optstr = ''.join([arg[1:] for arg in arglist if arg[0] == '-'])
         optstr = optstr.replace('l', 'b').replace('y', 'd')
+        self.optstr = optstr
         self.mapping = {'a': 'artist',
                         'b': 'album',
                         'c': 'composer',
                         'd': 'date',
                         'v': 'venue',
                         'g': 'genre',
-                        's': 'set',
+                        's': 'setnumber',
                         'C': 'comment',
                         'D': 'discnumber',
                         'n': 'tracknumber',
                         't': 'title'}
-        self.ckeys = 'abcdvgsCDnt'
-        self.hkeys = self.ckeys[:-2]
+        self.hkeys = 'abcdvgsCD'
+        self.ckeys = 'cdvDsntC'
+        self.hdr = self.hkeys
+        self.cols = self.ckeys
         self.keywords = [self.mapping[o] for o in self.ckeys]
+        self.hdrwords = [self.mapping[o] for o in self.hkeys]
+        self.prev = 0     
 
         try:
             self.comma = optstr.index(',')
-            self.hdr = [o for o in optstr
-                        if o in self.hkeys and optstr.index(o) < self.comma]
-            self.cols = [o for o in optstr if o in self.ckeys and
-                         o not in self.hdr]
         except ValueError:
             self.comma = None
-            self.hdr = []
-            self.cols = [o for o in optstr if o in self.ckeys]
 
-        if 'h' in optstr:
-            self.hdr = self.hkeys
-            self.cols = 'nt'
-            self.autohdr()
-        if not self.hdr + self.cols:
-            self.cols = [o for o in self.ckeys]
-        self.optlist = [o for o in optstr
-                        if o not in ''.join(self.hdr + self.cols) + ',h']
-        self.short_optstr = ''.join(self.optlist)
-        self.optstr = optstr
+        if not self.files:
+            print('list some files, directories, or globs\n')
 
-    def autohkeys(self):
-        return self.hkeys
-
-    def autockeys(self):
-        return ['n', 't']
+        if not (self.hdrkeys() or self.colkeys()):
+            _help()
+            exit()
 
     def hdrkeys(self):
-        if self.comma:
+        '''
+        specify what info shows in the header
+        '''
+        if 'h' in self.optstr and self.comma:
             return [o for o in self.optstr if o in self.hkeys and
-                    self.optstr.index(o) < self.comma]
+                    self.optstr.index(o) < self.comma] or self.hkeys
+        if 'h' in self.optstr:
+            return self.hkeys
         else:
-            return []
+            if self.comma:
+                return([o for o in self.optstr if o in self.hkeys and
+                    self.optstr.index(o) < self.comma] or '')
+        return(self.ckeys)
 
     def colkeys(self):
-        keys = [o for o in self.optstr if o in self.ckeys and
-                o not in self.hdrkeys()]
-        if keys or self.hdrkeys():
-            return keys
-        else:
-            return [o for o in self.ckeys]
-
-    def autohdr(self):
-        self.hdrkeys = self.autohkeys
-        self.colkeys = self.autockeys
+        '''
+        if comma return everything right of the comma or everything
+        '''
+        if self.comma is None:
+            return([o for o in self.optstr if
+                    (o in self.ckeys or o in self.hkeys)] or '')
+        return([o for o in self.optstr if o in self.ckeys and
+                self.optstr.index(o) > self.comma] or self.ckeys)
 
     def hdrkeywords(self):
         return [self.mapping[o] for o in self.hdrkeys()]
@@ -173,7 +173,7 @@ class OParser(object):
         filelist = []
         arglist = [arg for arg in arglist if arg[0] != '-']
         for arg in arglist:
-            arg = re.sub('[\[\]]', '?', arg)
+            arg = re.sub('\[[\]]', '?', arg)
             if isdir(arg):
                 arg = path.join(arg, '*')
             filelist.extend(glob(arg))
@@ -189,6 +189,9 @@ class Shower:
         self.hdrkeys = parser.hdrkeys()
         self.colkeys = parser.colkeys()
         self.parser = parser
+
+        if not (parser.hdrkeys() or parser.colkeys()):
+            _help()
 
     def header(self):
         hdr = AlbumHeader(self.parser.hdrkeywords())
@@ -223,6 +226,29 @@ class Shower:
             if dirty:
                 print("%s has non-viewable PRIV frames, '-x' to clean" % fn)
 
+    def has_cover(self, fname, func):
+        # func is the appropriate class for mp3 or other filetype
+        res = ''
+        mfile = func(fname)
+        if mfile.mime[0].endswith('/mp3'):
+            res = 'cover ' if 'APIC:' in mfile.keys() else ''
+        else:
+            try:
+                res = 'cover ' if mfile.pictures[0].data else ''
+            except (AttributeError, IndexError):
+                res = ''
+        return res
+
+        # if mfile.mime[0].endswith('/flac'):
+        #     res = 'cover ' if mf.pictures else ''
+        # else:
+        # try:
+        #      res = 'cover ' if 'APIC:' in mf.keys() else ''
+        #   except Exception as e:
+        #       print(e)
+        #         res = 'unknown '
+        # return res
+
     def show(self):
         '''show tag and tech info, format specified by options'''
         opts = self.parser.optstr
@@ -238,9 +264,9 @@ class Shower:
         ext = self.parser.getext(fn)
         if 'i' in opts:
             if '.mp3' == ext:
-                colhdrs = 'info' + ' ' * 29 + 'filename' + ' ' * (fnwidth-6)
+                colhdrs = 'info' + ' ' * 35 + 'filename' + ' ' * (fnwidth-6)
             else:
-                colhdrs = 'info' + ' ' * 23 + 'filename' + ' ' * (fnwidth-6)
+                colhdrs = 'info' + ' ' * 29 + 'filename' + ' ' * (fnwidth-6)
         else:
             colhdrs = 'filename' + ' ' * (fnwidth-6)
         # widths = []
@@ -256,18 +282,22 @@ class Shower:
         self.clr = 31
         for k in self.parser.colkeywords():
             if k in mf:
+#                print('k is ', k)
                 if color:
                     colhdrs += self.insert_colors(opts)
                 if k == 'tracknumber':
-                    hdr = ' tn'
+                    hdr = 't#'
                     colhdrs += ('%s' % hdr)
                 elif k == 'discnumber':
-                    hdr = ' dn'
+                    hdr = 'd#'
+                    colhdrs += ('%s' % hdr)
+                elif k == 'setnumber':
+                    hdr = 's# '
                     colhdrs += ('%s' % hdr)
                 else:
                     colhdrs += ('%s' % k)
                     hdr = k
-                v = mf[k][0]
+                v = ' ' + mf[k][0]
                 klen = len(hdr)
                 vlen = len(v)
 
@@ -277,13 +307,22 @@ class Shower:
 
         for fn in self.files:
             mf = mf_open(fn)
+            local_hdr = []
             local_grouping_dict = {}
             [local_grouping_dict.update({k: mf.get(k, [''])[0]})
-             for k in self.grouping_dict]
+                    for k in self.grouping_dict]
+            '''
+            Grouping - if an item in the header changes, print
+            that item header before the first song in that group
+            '''
             if 'G' in opts:
                 if self.grouping_dict != local_grouping_dict:
+                    for key in local_grouping_dict:
+                        if local_grouping_dict[key] != self.grouping_dict[key]:
+                            local_hdr.append(key)
+                    
                     self.grouping_dict = local_grouping_dict
-                    h = AlbumHeader(self.parser.hdrkeywords())
+                    h = AlbumHeader(local_hdr)
                     h.init(fn)
                     h.show(color=True)
 
@@ -300,6 +339,11 @@ class Shower:
                 ext = ext.lower()
                 inf = self.tech(ext, info)
                 inf += self.getlength(ext, info)
+                # colhdrs += len(self.has_cover(fn, func)) * ' '
+                cover = self.has_cover(fn, func)
+                if colhdrs:
+                    colhdrs += len(cover) * ' '
+                inf += cover
             s = inf + s
             print(colhdrs, end='')
             if colhdrs:
@@ -309,7 +353,6 @@ class Shower:
                 print(s)
             if color:
                 print('\033[m', end='')
-
             if 'E' in opts:
                 print_extra_items(fn, ext)
 
@@ -349,20 +392,97 @@ class Shower:
         return('\033[%d;%2sm' % (intensity, colr))
 
 
+def print_extra_items(fname, ext):
+
+    mf = mutagen.File(fname)
+    if ext.lower() == '.mp3':
+        my_keys = ['TALB', 'TIT2', 'TRCK', 'TPE1',
+                   'TPE2', 'TPOS', 'TDRC', 'TCON']
+        for key in mf:
+            if key in my_keys:
+                continue
+            elif key.startswith('APIC'):
+                print('APIC')
+                continue
+            elif not mf[key][0]:
+                continue
+            frame_desc = mf[key].__class__.__doc__.partition('\n')[0]
+            tab = (16 - len(frame_desc)) * ' '
+            print(frame_desc, tab, mf[key][0])
+        print
+    else:
+        my_keys = ['album',
+                   'artist',
+                   'date',
+                   'venue',
+                   'genre',
+                   'title',
+                   'discnumber',
+                   'tracknumber',
+                   'length']
+        for key in mf:
+            if key in my_keys:
+                continue
+            tab = (16 - len(key)) * ' '
+            if len(mf[key]) > 1:
+                print(key, tab, mf[key])
+            elif len(mf[key]) == 1:
+                print(key, tab, mf[key][0])
+
+
+def eachkey(shower, parser, fn, mf, color, opts, files):
+    s = '%s  ' % shower.filename_column(fn, parser.fname_cols())
+    for key in parser.colkeywords():
+        multival = ''
+        if key in mf:
+            if color:
+                s += shower.insert_colors(opts)
+            if key == 'tracknumber':
+                tn = str(mf.get(key, [0])[0])
+                col = tn.rjust(3, ' ')
+                s += col
+            elif key == 'discnumber':
+                dn = str(mf[key][0])
+                col = dn.rjust(2, ' ')
+                s += col
+            elif key == 'setnumber':
+                sn = str(mf[key][0])
+                col = sn.rjust(2, ' ')
+                s += col
+            else:
+                n = 0
+                while True:
+                    try:
+                        val = '%s' % mf[key][n]
+                    except IndexError:
+                        break
+                    if n > 0:
+                        multival += '\n' + val
+                    else:
+                        multival = val
+                    n += 1
+                    if 'm' not in opts:
+                        break
+            s += '%s ' % multival
+    return s
+
+
 def _print(msg):
     print(8 * ' ' + msg)
     return
 
 
 def _help():
-    _print('There are several short (one-letter) options for showt.  Showt does not take long options')
+    _print('There are several short (one-letter) options for showt.')
+    _print('Showt does not take long options')
     _print('')
-    _print("'-p' & '-pp' are common options, to make the printout in color, which helps readability a lot")
+    _print("'-p' & '-pp' are common options, to colorize the output, which helps readability a lot")
     _print("',' (comma) separates values below into header or row.  '-ali,dnt' shows artist, album, & discnumber")
     _print("    in the header, date, tracknumber & title in the rows.  Tracknumber and title always show in rows")
     _print("'-h' is very common, to print as much of the infomation in common with all tags in a header")
     _print("        instead of in rows.  There are several options for controlling the output, which can be")
     _print("        used with or without the '-h' option.")
+    _print('')
     _print("        '-a' show the artist")
     _print("        '-b' show the album title")
     _print("        '-c' composer")
@@ -372,12 +492,12 @@ def _help():
     _print("        '-f' controls the length in characters to allow the filename, ie -f30. Default is 20.")
     _print("        '-g' genre")
     _print("        '-G' Group files when a value in the header changes. ie on album title or discnumber change")
-    _print("        '-i' discnumber")
-    _print("        '-I' shows some tech info on the tracks at the left column in the rows.")
+    _print("        '-D' discnumber")
+    _print("        '-i' shows some tech info on the tracks at the left column in the rows.")
     _print("        '-j' justify tracknumbers so all are the same width in digits")
     _print("        '-t' tracknumber")
     _print("        '-u' show rows in read sequence (unsorted)")
-    _print("        '-V' venue")
+    _print("        '-v' venue")
     _print("")
     return
 
@@ -398,11 +518,9 @@ def mf_open(fname):
 def main():
     args = sys.argv[1:]
     parser = OParser(args)
-    for arg in args:
-        if 'help' in arg:
-            _help()
-            exit
-
+    if not parser.files:
+        exit()
+    '''
     if 's' in parser.optstr:
         while True:
             fname = sys.stdin.readline()
@@ -421,10 +539,7 @@ def main():
             shower = Shower(parser)
             shower.show()
         exit(0)
-
-    if not parser.files:
-        exit(0)
-
+    '''
     s = Shower(parser)
     s.show()
     mp3s = [f for f in parser.files if parser.getext(f) == '.mp3']

@@ -50,29 +50,29 @@ def eachkey(shower, parser, fn, mf, color, opts, files):
         if key in mf:
             if color:
                 s += shower.insert_colors(opts)
-            try:
-                if 'j' in opts and key == 'tracknumber':
-                    n = len(str(len(files)))
-                    tn = str(mf.get(key, [0])[0])
-                    col = tn.rjust(n, '0')
-                    s += col
-                else:
-                    n = 0
-                    while True:
-                        try:
-                            val = '%s' % mf[key][n]
-                        except IndexError:
-                            break
-                        if n > 0:
-                            multival += '\n' + val
-                        else:
-                            multival = val
-                        n += 1
-                        if 'm' not in opts:
-                            break
-            except KeyError:
-                pass
-        s += '%s ' % multival
+            if key == 'tracknumber':
+                tn = str(mf.get(key, [0])[0])
+                col = tn.rjust(3, ' ')
+                s += col
+            elif key == 'discnumber':
+                dn = str(mf[key][0])
+                col = dn.rjust(2, ' ')
+                s += col
+            else:
+                n = 0
+                while True:
+                    try:
+                        val = '%s' % mf[key][n]
+                    except IndexError:
+                        break
+                    if n > 0:
+                        multival += '\n' + val
+                    else:
+                        multival = val
+                    n += 1
+                    if 'm' not in opts:
+                        break
+            s += '%s ' % multival
     return s
 
 
