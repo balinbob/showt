@@ -13,13 +13,15 @@ from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3NoHeaderError
 from mutagen import File
+import bpdb
+# bpdb.set_trace()
 
 '''
 from libshowt.helpers import print_extra_items
 from libshowt.helpers import eachkey
 '''
 
-
+# class AlbumHeader(__builtins__.dict):
 class AlbumHeader(__builtins__.dict):
     def __init__(self, keys=['artist',
                              'album',
@@ -44,20 +46,10 @@ class AlbumHeader(__builtins__.dict):
                                  'setnumber',
                                  'discnumber']
         self.color = '\033[0;36m'
-
+        
     def init(self, fname):
         mf = mf_open(fname)
         [self.update({k: mf.get(k)}) for k in self.keys() if k in mf]
-        del mf
-
-    def sync(self, fname):
-        mf = mf_open(fname)
-        for k in self.keys():
-            pass
-#            print k
-#            if not mf.get(k) or mf.get(k) != self.get(k):
-#                self.__delitem__(k)
-
         del mf
 
     def __sorted__(self):
@@ -134,7 +126,7 @@ class OParser(object):
             if self.comma:
                 return([o for o in self.optstr if o in self.hkeys and
                     self.optstr.index(o) < self.comma] or '')
-        return(self.ckeys)
+        return()
 
     def colkeys(self):
         '''
@@ -157,7 +149,7 @@ class OParser(object):
         if mo:
             return int(mo.group()[1:])
         else:
-            return 20
+            return 20 
 
     def sort(self, li=[]):
         if filter(lambda o: len(o) > 1, li):
@@ -189,15 +181,13 @@ class Shower:
         self.hdrkeys = parser.hdrkeys()
         self.colkeys = parser.colkeys()
         self.parser = parser
-
         if not (parser.hdrkeys() or parser.colkeys()):
             _help()
-
     def header(self):
         hdr = AlbumHeader(self.parser.hdrkeywords())
         hdr.init(self.files[0])
 
-        map(hdr.sync, self.files)
+#        map(hdr.sync, self.files)
         return hdr
 
     def clean(self, files, opts=None):
@@ -231,104 +221,63 @@ class Shower:
         res = ''
         mfile = func(fname)
         if mfile.mime[0].endswith('/mp3'):
-            res = 'cover ' if 'APIC:' in mfile.keys() else ''
+            res = 'artwork' if 'APIC:' in mfile.keys() else ''
         else:
             try:
-                res = 'cover ' if mfile.pictures[0].data else ''
+                res = 'artwork' if mfile.pictures[0].data else ''
             except (AttributeError, IndexError):
                 res = ''
         return res
-
-        # if mfile.mime[0].endswith('/flac'):
-        #     res = 'cover ' if mf.pictures else ''
-        # else:
-        # try:
-        #      res = 'cover ' if 'APIC:' in mf.keys() else ''
-        #   except Exception as e:
-        #       print(e)
-        #         res = 'unknown '
-        # return res
 
     def show(self):
         '''show tag and tech info, format specified by options'''
         opts = self.parser.optstr
         header = self.header()
-        color = 'p' in opts
+        self.color = 'p' in opts
         sort = 'u' not in opts
-        header.show(color, sort)
-        parser = self.parser
+        
+        header.show(self.color, sort)
+        
         files = self.files
-
         fn = self.files[0]
         fnwidth = len(self.filename_column(fn, self.parser.fname_cols()))
+        hdr = ''
         ext = self.parser.getext(fn)
+        self.p = Printer(self.color)
+        self.pr = self.p.pr
         if 'i' in opts:
             if '.mp3' == ext:
-                colhdrs = 'info' + ' ' * 35 + 'filename' + ' ' * (fnwidth-6)
+                self.pr('info', 35)
+                self.pr('filename', fnwidth-6)
             else:
-                colhdrs = 'info' + ' ' * 29 + 'filename' + ' ' * (fnwidth-6)
+                self.pr('info', 29)
+                self.pr('filename', fnwidth-6)
         else:
-            colhdrs = 'filename' + ' ' * (fnwidth-6)
-        # widths = []
-
+            self.pr('filename', (fnwidth-6))
+        
         mf = mf_open(fn)
+        hdr = ''
         self.grouping_dict = {}
         self.group_list = self.parser.hdrkeywords()
         for key in self.group_list:
             if key in mf:
                 val = mf.get(key)[0]
                 self.grouping_dict.update({key: val})
-
-        self.clr = 31
-        for k in self.parser.colkeywords():
-            if k in mf:
-#                print('k is ', k)
-                if color:
-                    colhdrs += self.insert_colors(opts)
-                if k == 'tracknumber':
-                    hdr = 't#'
-                    colhdrs += ('%s' % hdr)
-                elif k == 'discnumber':
-                    hdr = 'd#'
-                    colhdrs += ('%s' % hdr)
-                elif k == 'setnumber':
-                    hdr = 's# '
-                    colhdrs += ('%s' % hdr)
-                else:
-                    colhdrs += ('%s' % k)
-                    hdr = k
-                v = ' ' + mf[k][0]
-                klen = len(hdr)
-                vlen = len(v)
-
-                colhdrs += (klen-vlen if klen > vlen else vlen-klen+1) * ' '
-
-        colhdrs += '\033[m'
-
+        # print the column headers
+        s = self.do_header(mf, self.parser.colkeywords())
+        self.p.prline(s)         
+        
+        hdr = ''
         for fn in self.files:
             mf = mf_open(fn)
-            local_hdr = []
-            local_grouping_dict = {}
-            [local_grouping_dict.update({k: mf.get(k, [''])[0]})
-                    for k in self.grouping_dict]
             '''
             Grouping - if an item in the header changes, print
             that item header before the first song in that group
+                self.color is a bool
             '''
             if 'G' in opts:
-                if self.grouping_dict != local_grouping_dict:
-                    for key in local_grouping_dict:
-                        if local_grouping_dict[key] != self.grouping_dict[key]:
-                            local_hdr.append(key)
-                    
-                    self.grouping_dict = local_grouping_dict
-                    h = AlbumHeader(local_hdr)
-                    h.init(fn)
-                    h.show(color=True)
-
-            self.clr = 31
-
-            s = eachkey(self, parser, fn, mf, color, opts, files)
+                self.grouping(fn, mf, self.color)
+            # color is a bool
             func = MP3 if ext == '.mp3' else File
             try:
                 info = func(fn).info
@@ -337,29 +286,34 @@ class Shower:
             inf = ''
             if 'i' in opts:
                 ext = ext.lower()
+                self.pr(self.tech(ext, info), 1)
+                self.pr(self.getlength(ext, info), 1)
+                
                 inf = self.tech(ext, info)
                 inf += self.getlength(ext, info)
-                # colhdrs += len(self.has_cover(fn, func)) * ' '
+                
                 cover = self.has_cover(fn, func)
-                if colhdrs:
-                    colhdrs += len(cover) * ' '
+                self.pr(self.has_cover(fn, func), 1)
                 inf += cover
-            s = inf + s
-            print(colhdrs, end='')
-            if colhdrs:
-                print('\n%s' % s)
-                colhdrs = ''
-            else:
-                print(s)
-            if color:
-                print('\033[m', end='')
-            if 'E' in opts:
-                print_extra_items(fn, ext)
+            
+            '''
+            print one column header or value for each key
+            '''
+            line = eachkey(self, self.parser, fn, mf, self.color, opts, files)
+            self.p.prline(line)
+
+            array = self.p.array
+            for lis in array:
+                width = 0
+                for column in lis:
+                    width = len(column) if len(column) > width else width
+        if 'E' in opts:
+            print_extra_items(fn, ext)
 
     def getlength(self, ext, info):
         sec = info.length % 60
         min = (info.length - sec) / 60
-        s = '%02d:%02d  ' % (min, sec)
+        s = '%02d:%02d' % (min, sec)
         return s
 
     def tech(self, ext, info):
@@ -375,21 +329,110 @@ class Shower:
                 round(info.bitrate/1000),
                 float(info.sample_rate/1000))
         return s
-
+    
     def filename_column(self, fpath, width=20):
         fname = path.basename(fpath)
         fname, ext = path.splitext(fname)
         fname = fname[:width]
         fname += (width + 2 - len(fname))*' ' + ext
         return fname
+       
+    def grouping(self, fn, mf, color):
+        local_hdr = []
+        local_grouping_dict = {}
+        [local_grouping_dict.update({k: mf.get(k, [''])[0]})
+                for k in self.grouping_dict]
+        if self.grouping_dict != local_grouping_dict:
+            for key in local_grouping_dict:
+                if local_grouping_dict[key] != self.grouping_dict[key]:
+                    local_hdr.append(key)
+                    
+            self.grouping_dict = local_grouping_dict
+            h = AlbumHeader(local_hdr)
+            h.init(fn)
+            h.show(color)
 
-    def insert_colors(self, opts, colkey=None):
-        intensity = 0
-        if opts.count('p') > 1:
-            intensity = 1
-        colr = self.clr
-        self.clr += 1
-        return('\033[%d;%2sm' % (intensity, colr))
+    def do_header(self, mf, colkeywords):
+        '''
+        print the column headers
+        '''
+        # print the column headers
+        for k in colkeywords:
+            # for each key
+            hdr = ''
+            if k in mf or True:
+                v = ' ' + mf.get(k, [''])[0]
+                if k == 'tracknumber':
+                    hdr = ' t#'
+                elif k == 'discnumber':
+                    hdr = ' d#'
+                elif k == 'setnumber':
+                    hdr = ' s#'
+                else:
+                    hdr = k
+                klen = len(hdr)
+                vlen = len(v[:24])
+                nspaces = klen-vlen if klen > vlen else vlen-klen
+                self.pr(hdr, nspaces)
+    
+class Printer:
+    '''
+    tabbed printing with optional colors
+    '''
+    def __init__(self, mybool):
+        self.clrstr = '\033[1;37m'
+        self.pos = 0
+        self.clr = 37
+        self.line = ''
+        self.mybool = mybool
+        self.colnum = 0
+        self.array = []
+        self.linenum = 0
+
+    def pr(self, data, numspaces):
+        self.line += self.clrstr if self.mybool else ''
+        self.line += data + ' ' * numspaces
+        self.clrswap()
+#        if self.linenum == 0:
+#            if data:
+#                self.array.append([data])
+#        else:
+#            if data:
+#                self.array[self.colnum].append(data)
+        self.colnum += 1
+        self.pos += len(data) + numspaces
+
+    def get_pos(self):
+        return self.pos
+
+    def get_line(self):
+        return self.line
+
+    def prline(self, s=''):
+        print(s or self.line, end='\n')
+        self.clr = 37
+        self.clrstr = '\033[1;37m'
+        self.line = ''
+        self.colnum = 0
+        self.linenum += 1
+        # print(self.array)
+#        self.array += [self.colnum]
+
+    def clrswap(self):
+        intensity = 1
+        if self.clr == 37:
+            self.clr = 32
+        else:
+            self.clr = 37
+        self.clrstr = '\033[%d;%2sm' % (intensity, self.clr)
+
+    def newline(self):
+        self.line += '\n'
+        self.line += self.clrstr
+        for i in self.array:
+            print(i)
+        return
+        # print('\033[m', end='\n')
 
 
 def print_extra_items(fname, ext):
@@ -408,7 +451,7 @@ def print_extra_items(fname, ext):
                 continue
             frame_desc = mf[key].__class__.__doc__.partition('\n')[0]
             tab = (16 - len(frame_desc)) * ' '
-            print(frame_desc, tab, mf[key][0])
+            print(frame_desc, tab, mf[key][0], end='')
         print
     else:
         my_keys = ['album',
@@ -431,29 +474,31 @@ def print_extra_items(fname, ext):
 
 
 def eachkey(shower, parser, fn, mf, color, opts, files):
-    s = '%s  ' % shower.filename_column(fn, parser.fname_cols())
+    # s = '%s  ' % shower.filename_column(fn, parser.fname_cols())
+    pr = shower.pr
+    # 
+    pr('%s ' % shower.filename_column(fn, parser.fname_cols()), 1)
     for key in parser.colkeywords():
         multival = ''
-        if key in mf:
+        if key in mf or True:
             if color:
-                s += shower.insert_colors(opts)
+                # color is a bool 
+                pass
             if key == 'tracknumber':
                 tn = str(mf.get(key, [0])[0])
-                col = tn.rjust(3, ' ')
-                s += col
+                column = tn.rjust(3, ' ')
+                
             elif key == 'discnumber':
-                dn = str(mf[key][0])
-                col = dn.rjust(2, ' ')
-                s += col
+                dn = str(mf.get(key, [0])[0])
+                column = dn.rjust(3, ' ')
             elif key == 'setnumber':
-                sn = str(mf[key][0])
-                col = sn.rjust(2, ' ')
-                s += col
+                sn = str(mf.get(key, [0])[0])
+                column = sn.rjust(3, ' ')
             else:
                 n = 0
                 while True:
                     try:
-                        val = '%s' % mf[key][n]
+                        val = '%s' % (mf.get(key, [''])[0])
                     except IndexError:
                         break
                     if n > 0:
@@ -463,8 +508,13 @@ def eachkey(shower, parser, fn, mf, color, opts, files):
                     n += 1
                     if 'm' not in opts:
                         break
-            s += '%s ' % multival
-    return s
+                column = multival[:24]
+            if key in ['title', 'comment']:
+                nspaces = 25 - len(column)
+            else:
+                nspaces = 1 
+            pr(column, nspaces)
+    return
 
 
 def _print(msg):
@@ -483,6 +533,12 @@ def _help():
     _print("        instead of in rows.  There are several options for controlling the output, which can be")
     _print("        used with or without the '-h' option.")
     _print('')
+    _print("Some options control output:")
+    _print("        '-h' show some tag/value pairs in a header")
+    _print("with no header keys before comma, print all known tags in the header")
+    _print("except tracknumber and title")
+    _print("        '-,' show values following the comma in rows and columns")
+    _print("        '-G' Group files when a value in the header changes. ie on album title or discnumber change")
     _print("        '-a' show the artist")
     _print("        '-b' show the album title")
     _print("        '-c' composer")
@@ -491,7 +547,7 @@ def _help():
     _print("        '-E' shows all items in the tag, but unrecognized items are unformatted")
     _print("        '-f' controls the length in characters to allow the filename, ie -f30. Default is 20.")
     _print("        '-g' genre")
-    _print("        '-G' Group files when a value in the header changes. ie on album title or discnumber change")
+    _print("        '-s' setnumber")
     _print("        '-D' discnumber")
     _print("        '-i' shows some tech info on the tracks at the left column in the rows.")
     _print("        '-j' justify tracknumbers so all are the same width in digits")
@@ -545,7 +601,6 @@ def main():
     mp3s = [f for f in parser.files if parser.getext(f) == '.mp3']
     if mp3s:
         s.clean(mp3s, parser.optstr)
-
 
 if __name__ == '__main__':
     main()
