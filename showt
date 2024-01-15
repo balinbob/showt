@@ -372,7 +372,12 @@ class Shower:
                     hdr = k
                 klen = len(hdr)
                 vlen = len(v[:24])
-                nspaces = klen-vlen if klen > vlen else vlen-klen
+                if k in ['tracknumber']:
+                    nspaces = 1 
+                elif k in ['comment', 'venue', 'composer', 'title']:
+                    nspaces = 25 - klen
+                else:
+                    nspaces = klen-vlen if klen > vlen else vlen-klen
                 self.pr(hdr, nspaces)
     
 class Printer:
