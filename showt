@@ -13,9 +13,10 @@ from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3NoHeaderError
 from mutagen import File
-# import bpdb
 from libshowt import printer
-from libshowt.eachkey import eachkey
+from libshowt.eachkey import Eachkey
+
+
 '''
 from libshowt.helpers import print_extra_items
 from libshowt.helpers import eachkey
@@ -113,6 +114,11 @@ class OParser(object):
             _help()
             exit()
 
+        print('\033[2J')
+        sys.stdout.flush()
+        print('\033[H')
+        sys.stdout.flush()
+
     def hdrkeys(self):
         '''
         specify what info shows in the header
@@ -182,10 +188,6 @@ class Shower:
         self.hdrkeys = parser.hdrkeys()
         self.colkeys = parser.colkeys()
         self.parser = parser
-        self.use = {'comment': False,
-                    'venue': False,
-                    'title': False,
-                    'composer': False}
         if not (parser.hdrkeys() or parser.colkeys()):
             _help()
 
@@ -215,13 +217,12 @@ class Shower:
         sort = 'u' not in opts
         # print the album/show common fields in a header
         header.show(self.color, sort)
-
-        fn = self.files[0]
-        fnwidth = len(self.filename_column(fn, self.parser.fname_cols()))
-
-        ext = self.parser.getext(fn)
         self.p = printer.Printer(self.color)
         self.pr = self.p.pr
+        fn = self.files[0]
+        fnwidth = len(self.filename_column(fn, self.parser.fname_cols()))
+        ext = self.parser.getext(fn)
+
         if 'i' in opts:
             if '.mp3' == ext:
                 self.pr('info', 35)
@@ -233,16 +234,10 @@ class Shower:
             self.pr('filename', (fnwidth - 6))
 
         mf = mf_open(fn)
-        self.grouping_dict = {}
-        self.group_list = self.parser.hdrkeywords()
-        for key in self.group_list:
-            if key in mf:
-                val = mf.get(key)[0]
-                self.grouping_dict.update({key: val})
         # print the column headers
         s = self.do_header(mf, self.parser.colkeywords())
         self.p.prline(s)
-
+        eachkey = Eachkey()
         for fn in self.files:
             mf = mf_open(fn)
             '''
@@ -258,23 +253,24 @@ class Shower:
                 info = func(fn).info
             except (IsADirectoryError, mutagen.MutagenError):
                 return ''
-            inf = ''
+
+            # inf = ''
             if 'i' in opts:
                 ext = ext.lower()
                 self.pr(self.tech(ext, info), 1)
                 self.pr(self.getlength(ext, info), 1)
 
-                inf = self.tech(ext, info)
-                inf += self.getlength(ext, info)
+#                inf = self.tech(ext, info)
+#                inf += self.getlength(ext, info)
 
-                cover = self.has_cover(fn, func)
+                # cover = self.has_cover(fn, func)
                 self.pr(self.has_cover(fn, func), 1)
-                inf += cover
+#                inf += cover
 
             '''
             print one column header or value for each key
             '''
-            line = eachkey(self, self.parser, mf, fn)
+            line = eachkey.eachkey(self, self.parser, mf, fn)
             self.p.prline(line)
 
         if 'E' in opts:
@@ -308,6 +304,13 @@ class Shower:
         return fname
 
     def grouping(self, fn, mf, color):
+        self.grouping_dict = {}
+        self.group_list = self.parser.hdrkeywords()
+        for key in self.group_list:
+            if key in mf:
+                val = mf.get(key, [''])[0]
+                self.grouping_dict.update({key: val})
+
         local_hdr = []
         local_grouping_dict = {}
         [local_grouping_dict.update({k: mf.get(k, [''])[0]})

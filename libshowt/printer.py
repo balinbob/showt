@@ -5,9 +5,7 @@ class Printer:
     def __init__(self, use_color=False):
         self.current_intensity = 1
         self.current_color = 37
-        self.alt_color = 33
         self.colorstr = self.format_color()
-        self.pos = 0
         self.line = ''
         self.use_color = use_color
 
@@ -21,25 +19,15 @@ class Printer:
         if self.use_color:
             self.line += f"{self.colorstr}"
         self.line += f"{data}{' ' * numspaces}"
+#        self.tpos = self.vpos[0] + len(self.line), self.vpos[1]]
         self.clrswap()
-        self.pos += len(data) + numspaces
-
-    def set_pos(self, pos=0):
-        self.pos = pos
-
-    def set_line(self, line=''):
-        self.line = line
-
-    def get_pos(self):
-        return self.pos
-
-    def get_line(self):
-        return self.line
+#        self.pos += len(data) + numspaces
 
     def prline(self, str=''):
+        # sys.stdout = open('/dev/pts/8', 'w')
         print(str or self.line, end='\n')
+        # sys.stdout = sys.__stdout__
         self.line = ''
-        self.pos = 0
         self.current_color = 37
         self.set_color(self.current_intensity, 37)
 
