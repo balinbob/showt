@@ -217,33 +217,20 @@ class Shower:
         sort = 'u' not in opts
         # print the album/show common fields in a header
         header.show(self.color, sort)
+
         self.p = printer.Printer(self.color)
         self.pr = self.p.pr
         fn = self.files[0]
         fnwidth = len(self.filename_column(fn, self.parser.fname_cols()))
         ext = self.parser.getext(fn)
 
-        if 'i' in opts:
-            if '.mp3' == ext:
-                self.pr('info', 35)
-                self.pr('filename', fnwidth - 6)
-            else:
-                self.pr('info', 29)
-                self.pr('filename', fnwidth - 6)
-        else:
-            self.pr('filename', (fnwidth - 6))
+        self.pre_header(opts, ext, fnwidth)
 
         mf = mf_open(fn)
         # print the column headers
         s = self.do_header(mf, self.parser.colkeywords())
         self.p.prline(s)
-
-        self.grouping_dict = {}
-        self.group_list = self.parser.hdrkeywords()
-        for key in self.group_list:
-            if key in mf:
-                val = mf.get(key, [''])[0]
-                self.grouping_dict.update({key: val})
+        self.grouping_dict = self.pre_grouping(mf)
 
         eachkey = Eachkey()
         for fn in self.files:
@@ -254,29 +241,14 @@ class Shower:
                 self.color is a bool
             '''
             if 'G' in opts:
-                self.grouping(fn, mf, self.color)
-            # color is a bool
-            func = MP3 if ext == '.mp3' else File
-            try:
-                info = func(fn).info
-            except (IsADirectoryError, mutagen.MutagenError):
-                return ''
+                self.do_grouping(fn, mf, self.color)
+            ext = ext.lower()
 
-            # inf = ''
             if 'i' in opts:
-                ext = ext.lower()
-                self.pr(self.tech(ext, info), 1)
-                self.pr(self.getlength(ext, info), 1)
-
-#                inf = self.tech(ext, info)
-#                inf += self.getlength(ext, info)
-
-                # cover = self.has_cover(fn, func)
-                self.pr(self.has_cover(fn, func), 1)
-#                inf += cover
+                self.print_tech(ext, fn)
 
             '''
-            print one column header or value for each key
+            print one or more values for each key
             '''
             line = eachkey.eachkey(self, self.parser, mf, fn)
             self.p.prline(line)
@@ -290,7 +262,23 @@ class Shower:
         s = '%02d:%02d' % (min, sec)
         return s
 
+    def print_tech(self, ext, fn):
+        '''
+        find and print tech info
+        '''
+        func = MP3 if ext == '.mp3' else File
+        try:
+            info = func(fn).info
+        except (IsADirectoryError, mutagen.MutagenError):
+            return ''
+        self.pr(self.tech(ext, info), 1)
+        self.pr(self.getlength(ext, info), 1)
+        self.pr(self.has_cover(fn, func), 1)
+
     def tech(self, ext, info):
+        '''
+        extract tech info from mutagen file
+        '''
         if ext == '.mp3':
             s = '%dch %s %3skbps %.1fkhz ' % (
                 info.channels,
@@ -311,7 +299,15 @@ class Shower:
         fname += (width + 2 - len(fname)) * ' ' + ext
         return fname
 
-    def grouping(self, fn, mf, color):
+    def pre_grouping(self, mf):
+        grouping_dict = {}
+        for key in self.parser.hdrkeywords():
+            if key in mf:
+                val = mf.get(key, [''])[0]
+                grouping_dict.update({key: val})
+        return grouping_dict
+
+    def do_grouping(self, fn, mf, color):
 
         local_hdr = []
         local_grouping_dict = {}
@@ -328,6 +324,20 @@ class Shower:
             h.init(fn)
             h.show(color)
 
+    def pre_header(self, opts, ext, fnwidth):
+        '''
+        start the column headers
+        '''
+        if 'i' in opts:
+            if '.mp3' == ext:
+                self.pr('info', 35)
+                self.pr('filename', fnwidth - 6)
+            else:
+                self.pr('info', 29)
+                self.pr('filename', fnwidth - 6)
+        else:
+            self.pr('filename', (fnwidth - 6))
+
     def do_header(self, mf, colkeywords):
         '''
         print the column headers
@@ -336,25 +346,26 @@ class Shower:
         for k in colkeywords:
             # for each key
             hdr = ''
-            if k in mf or True:
-                v = ' ' + mf.get(k, [''])[0]
-                if k == 'tracknumber':
-                    hdr = ' t#'
-                elif k == 'discnumber':
-                    hdr = ' d#'
-                elif k == 'setnumber':
-                    hdr = ' s#'
-                else:
-                    hdr = k
-                klen = len(hdr)
-                vlen = len(v[:24])
-                if k in ['tracknumber', 'setnumber']:
-                    nspaces = 1
-                elif k in ['comment', 'venue', 'composer', 'title']:
-                    nspaces = 25 - klen
-                else:
-                    nspaces = klen - vlen if klen > vlen else vlen - klen
-                self.pr(hdr, nspaces)
+            v = ' ' + mf.get(k, [''])[0]
+            if k == 'tracknumber':
+                hdr = ' t#'
+            elif k == 'discnumber':
+                hdr = ' d#'
+            elif k == 'setnumber':
+                hdr = ' s#'
+            else:
+                hdr = k
+            klen = len(hdr)
+            vlen = len(v[:24])
+            if k in ('tracknumber', 'setnumber'):
+                nspaces = 1
+            elif k in ('comment', 'venue', 'composer', 'title'):
+                nspaces = 24 - klen
+            elif k in ('date', 'genre'):
+                nspaces = 12 - klen
+            else:
+                nspaces = klen - vlen if klen > vlen else vlen - klen
+            self.pr(hdr, nspaces)
 
 
 def print_extra_items(fname, ext):
@@ -393,52 +404,6 @@ def print_extra_items(fname, ext):
                 print(key, tab, mf[key])
             elif len(mf[key]) == 1:
                 print(key, tab, mf[key][0])
-
-
-'''
-def eachkey(shower, parser, fn, mf, color, opts, files):
-    # s = '%s  ' % shower.filename_column(fn, parser.fname_cols())
-    pr = shower.pr
-    #
-    pr('%s ' % shower.filename_column(fn, parser.fname_cols()), 1)
-    for key in parser.colkeywords():
-        multival = ''
-        if key in mf or True:
-            if color:
-                # color is a bool
-                pass
-            if key == 'tracknumber':
-                tn = str(mf.get(key, [0])[0])
-                column = tn.rjust(3, ' ')
-
-            elif key == 'discnumber':
-                dn = str(mf.get(key, [0])[0])
-                column = dn.rjust(3, ' ')
-            elif key == 'setnumber':
-                sn = str(mf.get(key, [0])[0])
-                column = sn.rjust(3, ' ')
-            else:
-                n = 0
-                while True:
-                    try:
-                        val = '%s' % (mf.get(key, [''])[0])
-                    except IndexError:
-                        break
-                    if n > 0:
-                        multival += '\n' + val
-                    else:
-                        multival = val
-                    n += 1
-                    if 'm' not in opts:
-                        break
-                column = multival[:24]
-            if key in ['title', 'comment']:
-                nspaces = 25 - len(column)
-            else:
-                nspaces = 1
-            pr(column, nspaces)
-    return
-'''
 
 
 def _print(msg):
@@ -533,9 +498,6 @@ def main():
     '''
     s = Shower(parser)
     s.show()
-    mp3s = [f for f in parser.files if parser.getext(f) == '.mp3']
-    if mp3s:
-        s.clean(mp3s, parser.optstr)
 
 
 if __name__ == '__main__':
