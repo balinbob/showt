@@ -237,6 +237,14 @@ class Shower:
         # print the column headers
         s = self.do_header(mf, self.parser.colkeywords())
         self.p.prline(s)
+
+        self.grouping_dict = {}
+        self.group_list = self.parser.hdrkeywords()
+        for key in self.group_list:
+            if key in mf:
+                val = mf.get(key, [''])[0]
+                self.grouping_dict.update({key: val})
+
         eachkey = Eachkey()
         for fn in self.files:
             mf = mf_open(fn)
@@ -304,17 +312,12 @@ class Shower:
         return fname
 
     def grouping(self, fn, mf, color):
-        self.grouping_dict = {}
-        self.group_list = self.parser.hdrkeywords()
-        for key in self.group_list:
-            if key in mf:
-                val = mf.get(key, [''])[0]
-                self.grouping_dict.update({key: val})
 
         local_hdr = []
         local_grouping_dict = {}
         [local_grouping_dict.update({k: mf.get(k, [''])[0]})
             for k in self.grouping_dict]
+
         if self.grouping_dict != local_grouping_dict:
             for key in local_grouping_dict:
                 if local_grouping_dict[key] != self.grouping_dict[key]:
