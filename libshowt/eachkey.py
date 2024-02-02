@@ -1,11 +1,13 @@
+import os
 import sys
-import subprocess
+# import subprocess
 
 
 class Eachkey():
     def __init__(self):
         self.cursor_line = 0    # top of display
-        self.last_line = int(subprocess.check_output(['tput', 'lines']))
+        # self.last_line = int(subprocess.check_output(['tput', 'lines']))
+        self.last_line = os.get_terminal_size()[1]
 
     def linesdown(self, y):
         return (f'\033[{y}B')
@@ -39,18 +41,7 @@ class Eachkey():
                     self.cursor_line += 1
                     sys.stdout.flush()
                     y_offset += 1
-                    if key in ('tracknumber', 'discnumber', 'setnumber'):
-                        pr(f'{self.back(4)}')
-                        rpadding = 1
-                    elif key in ('date', 'genre'):
-                        pr(f'{self.back(12)}')
-                        rpadding = 12 - len(column)
-                    else:
-                        pr(f'{self.back(24)}')
-                        rpadding = 24 - len(column)
-                    sys.stdout.flush()
-                    pr(f'{column}', rpadding)
-                    sys.stdout.flush()
+                    self.more_values(key, column, pr)
                     if lineno + 1 == len(mf.get(key, [])):  # last value?
                         pr(f'{self.linesup(y_offset)}')
                         sys.stdout.flush()
@@ -69,5 +60,19 @@ class Eachkey():
             rpadding = 12 - len(column)
         else:
             rpadding = 24 - len(column)
+        pr(f'{column}', rpadding)
+        sys.stdout.flush()
+
+    def more_values(self, key, column, pr):
+        if key in ('tracknumber', 'discnumber', 'setnumber'):
+            pr(f'{self.back(4)}')
+            rpadding = 1
+        elif key in ('date', 'genre'):
+            pr(f'{self.back(12)}')
+            rpadding = 12 - len(column)
+        else:
+            pr(f'{self.back(24)}')
+            rpadding = 24 - len(column)
+        sys.stdout.flush()
         pr(f'{column}', rpadding)
         sys.stdout.flush()
